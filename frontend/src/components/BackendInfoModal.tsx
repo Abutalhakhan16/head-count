@@ -46,8 +46,8 @@ export const BackendInfoModal: React.FC<BackendInfoModalProps> = ({
             </p>
             <p className="mt-1 opacity-90 leading-relaxed">
               {backendStatus.online 
-                ? 'Real-time AI Head Counting through camera is fully operational with YOLOv8n, Haar Cascades, and ByteTrack tracking at http://localhost:8000.'
-                : 'The Python server is currently not responding at http://localhost:8000. In-browser camera vision is active for live camera streaming.'
+                ? 'Real-time AI Head Counting through camera is fully operational with ROI tracking and ByteTrack metrics via the integrated /api vision service.'
+                : 'The Vision API is currently unavailable at /api. In-browser camera vision is active for live camera streaming.'
               }
             </p>
           </div>
@@ -67,17 +67,15 @@ export const BackendInfoModal: React.FC<BackendInfoModalProps> = ({
 
         {/* Instructions on how to launch the backend */}
         <div className="space-y-2 text-xs">
-          <p className="font-bold text-slate-700">To start the Python backend and web application:</p>
+          <p className="font-bold text-slate-700">Integrated Node.js Vision Server:</p>
           <div className="p-3 rounded-xl bg-slate-950 text-slate-200 font-mono text-[11px] space-y-1">
-            <p className="text-slate-400"># Start both Backend & Frontend with one command:</p>
-            <p className="text-emerald-400">./start.sh</p>
-            <p className="text-slate-400"># Or start backend independently:</p>
-            <p className="text-emerald-400">cd backend && ./venv/bin/python main.py</p>
+            <p className="text-slate-400"># Start unified Frontend & Vision API on port 3000:</p>
+            <p className="text-emerald-400">npm run dev</p>
           </div>
         </div>
 
         <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-[11px] text-slate-400 font-mono">http://localhost:8000</span>
+          <span className="text-[11px] text-slate-400 font-mono">/api/status</span>
           <div className="flex items-center gap-2">
             <button
               onClick={onProbeBackend}

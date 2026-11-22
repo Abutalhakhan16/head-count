@@ -15,11 +15,15 @@ import {
 } from 'lucide-react';
 import { Classroom, Camera } from '../types';
 
+import { aiBackendService } from '../services/aiBackendService';
+
 interface ClassroomsAndCamerasViewProps {
   classrooms: Classroom[];
   cameras: Camera[];
   onSaveClassroom: (classroom: Classroom) => void;
   onSaveCamera: (camera: Camera) => void;
+  onOpenCameraFeed?: (cameraId: string) => void;
+  onViewSchedule?: () => void;
 }
 
 export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> = ({
@@ -27,11 +31,14 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
   cameras,
   onSaveClassroom,
   onSaveCamera,
+  onOpenCameraFeed,
+  onViewSchedule,
 }) => {
   const [activeTab, setActiveTab] = useState<'CLASSROOMS' | 'CAMERAS'>('CLASSROOMS');
   const [isAddClassroomModalOpen, setIsAddClassroomModalOpen] = useState(false);
   const [isAddCameraModalOpen, setIsAddCameraModalOpen] = useState(false);
   const [pingingCamId, setPingingCamId] = useState<string | null>(null);
+  const [pingFeedback, setPingFeedback] = useState<{ camId: string; online: boolean; message: string } | null>(null);
 
   // Form State: Classroom
   const [cCode, setCCode] = useState('');
@@ -43,17 +50,42 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
   // Form State: Camera
   const [camName, setCamName] = useState('');
   const [camClassroomId, setCamClassroomId] = useState(classrooms[0]?.id || 'cls_101');
-  const [camRtsp, setCamRtsp] = useState('rtsp://admin:stream@192.168.1.105:554/live/main');
+  const [camRtsp, setCamRtsp] = useState('demo://classroom_lecture');
   const [camIp, setCamIp] = useState('192.168.1.105');
   const [camPort, setCamPort] = useState(554);
   const [camResolution, setCamResolution] = useState('1920x1080 (1080p)');
   const [camFps, setCamFps] = useState(30);
+  const [camTestResult, setCamTestResult] = useState<{ online: boolean; message: string } | null>(null);
+  const [testingNewCam, setTestingNewCam] = useState(false);
 
-  const handleTestPing = (camId: string) => {
-    setPingingCamId(camId);
-    setTimeout(() => {
+  const handleTestPing = async (cam: Camera) => {
+    setPingingCamId(cam.id);
+    setPingFeedback(null);
+    const t0 = performance.now();
+    if (cam.id === 'cam_webcam') {
+      setPingFeedback({ camId: cam.id, online: true, message: 'Browser WebRTC camera interface available.' });
       setPingingCamId(null);
-    }, 1200);
+      return;
+    }
+    const res = await aiBackendService.testCctvConnection(cam.rtspUrl);
+    const latency = Math.max(12, Math.round(performance.now() - t0));
+    onSaveCamera({
+      ...cam,
+      status: res.online ? 'ONLINE' : 'OFFLINE',
+      latencyMs: latency,
+      lastPing: 'Just now',
+      resolution: res.resolution || cam.resolution,
+    });
+    setPingFeedback({ camId: cam.id, online: res.online, message: res.message });
+    setPingingCamId(null);
+  };
+
+  const handleTestNewCamera = async () => {
+    setTestingNewCam(true);
+    setCamTestResult(null);
+    const res = await aiBackendService.testCctvConnection(camRtsp);
+    setCamTestResult(res);
+    setTestingNewCam(false);
   };
 
   const handleAddClassroom = (e: React.FormEvent) => {
@@ -73,28 +105,37 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
     setCName('');
   };
 
-  const handleAddCamera = (e: React.FormEvent) => {
+  const handleAddCamera = async (e: React.FormEvent) => {
     e.preventDefault();
     const assignedClassroom = classrooms.find(c => c.id === camClassroomId);
+    const newCamId = `cam_${Date.now()}`;
     const newCam: Camera = {
-      id: `cam_${Date.now()}`,
+      id: newCamId,
       name: camName,
       classroomId: camClassroomId,
       classroomName: assignedClassroom ? assignedClassroom.name : 'Classroom',
-      rtspUrl: camRtsp,
+      rtspUrl: camRtsp.trim(),
       ipAddress: camIp,
       port: Number(camPort),
       status: 'ONLINE',
       resolution: camResolution,
       fps: Number(camFps),
       bitrate: '4.5 Mbps',
-      latencyMs: 140,
+      latencyMs: 95,
       lastPing: 'Just now',
       roiZone: { x: 5, y: 15, width: 90, height: 80 },
     };
+    await aiBackendService.registerCamera({
+      id: newCamId,
+      name: newCam.name,
+      rtsp_url: newCam.rtspUrl,
+      classroom: newCam.classroomName,
+      fps: newCam.fps,
+    });
     onSaveCamera(newCam);
     setIsAddCameraModalOpen(false);
     setCamName('');
+    setCamTestResult(null);
   };
 
   return (
@@ -194,9 +235,13 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
 
                 <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                   <span className="text-[11px]">AI Vision Enabled</span>
-                  <span className="text-blue-600 font-semibold cursor-pointer hover:underline">
+                  <button
+                    type="button"
+                    onClick={() => onViewSchedule && onViewSchedule()}
+                    className="text-blue-600 font-semibold hover:underline"
+                  >
                     View Schedule →
-                  </span>
+                  </button>
                 </div>
               </div>
             );
@@ -207,6 +252,28 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
       {/* Cameras Tab */}
       {activeTab === 'CAMERAS' && (
         <div className="space-y-4">
+          {pingFeedback && (
+            <div
+              className={`p-3.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${
+                pingFeedback.online
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-amber-50 border-amber-200 text-amber-900'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                {pingFeedback.online ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                )}
+                <span>{pingFeedback.message}</span>
+              </div>
+              <button onClick={() => setPingFeedback(null)} className="text-slate-500 hover:text-slate-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
@@ -255,21 +322,38 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
                         </td>
 
                         <td className="py-3.5 px-4 text-center">
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            cam.status === 'ONLINE'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              cam.status === 'ONLINE' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
+                            }`} />
                             {cam.status}
                           </span>
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
-                          <button
-                            onClick={() => handleTestPing(cam.id)}
-                            disabled={isPinging}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
-                          >
-                            <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin text-blue-600' : ''}`} />
-                            <span>{isPinging ? 'Pinging...' : 'Test Ping'}</span>
-                          </button>
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleTestPing(cam)}
+                              disabled={isPinging}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition"
+                            >
+                              <RefreshCw className={`w-3 h-3 ${isPinging ? 'animate-spin text-blue-600' : ''}`} />
+                              <span>{isPinging ? 'Probing...' : 'Test'}</span>
+                            </button>
+                            {onOpenCameraFeed && (
+                              <button
+                                onClick={() => onOpenCameraFeed(cam.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs transition"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                <span>Live Feed</span>
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -391,12 +475,36 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
                 </select>
               </div>
               <div>
-                <label className="block font-bold text-slate-700 mb-1">RTSP Stream URL</label>
+                <label className="block font-bold text-slate-700 mb-1">Stream URL (RTSP / HTTP / Demo Preset)</label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {[
+                    { label: 'Demo Classroom', url: 'demo://classroom_lecture' },
+                    { label: 'Demo People', url: 'demo://real_people' },
+                    { label: 'Demo Crowd', url: 'demo://crowd_group' },
+                  ].map((p) => (
+                    <button
+                      key={p.url}
+                      type="button"
+                      onClick={() => {
+                        setCamRtsp(p.url);
+                        setCamTestResult(null);
+                      }}
+                      className={`px-2 py-1 rounded-md border text-[11px] font-medium ${
+                        camRtsp === p.url ? 'bg-blue-600 text-white border-blue-600' : 'bg-slate-50 text-slate-700 border-slate-200'
+                      }`}
+                    >
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
                 <input
                   type="text"
                   required
                   value={camRtsp}
-                  onChange={e => setCamRtsp(e.target.value)}
+                  onChange={e => {
+                    setCamRtsp(e.target.value);
+                    setCamTestResult(null);
+                  }}
                   className="w-full p-2.5 rounded-lg border border-slate-300 font-mono"
                 />
               </div>
@@ -422,20 +530,39 @@ export const ClassroomsAndCamerasView: React.FC<ClassroomsAndCamerasViewProps> =
                   />
                 </div>
               </div>
-              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+              {camTestResult && (
+                <div className={`p-2.5 rounded-lg border text-xs flex items-start gap-2 ${
+                  camTestResult.online ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-900'
+                }`}>
+                  {camTestResult.online ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />}
+                  <span>{camTestResult.message}</span>
+                </div>
+              )}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => setIsAddCameraModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-slate-600"
+                  onClick={handleTestNewCamera}
+                  disabled={testingNewCam}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
                 >
-                  Cancel
+                  <RefreshCw className={`w-3.5 h-3.5 ${testingNewCam ? 'animate-spin' : ''}`} />
+                  <span>{testingNewCam ? 'Testing...' : 'Test Stream'}</span>
                 </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold shadow-md shadow-blue-500/20"
-                >
-                  Save & Validate Stream
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddCameraModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-slate-600"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white font-semibold shadow-md shadow-blue-500/20"
+                  >
+                    Save & Validate Stream
+                  </button>
+                </div>
               </div>
             </form>
           </div>

@@ -30,8 +30,10 @@ export function App() {
   });
   const [isBackendModalOpen, setIsBackendModalOpen] = useState(false);
 
-  // Active target for lecture comparison
+  // Active target for lecture comparison & CCTV camera
   const [comparisonTargetId, setComparisonTargetId] = useState<string | null>(null);
+  const [selectedCctvCameraId, setSelectedCctvCameraId] = useState<string | null>(null);
+  const [appNotice, setAppNotice] = useState<string | null>(null);
 
   // Poll / Probe backend on load
   const probeBackend = async () => {
@@ -50,7 +52,6 @@ export function App() {
     setCurrentUser(user);
     storageService.setCurrentUser(user);
 
-    // If switching to student while on restricted tab, send to dashboard
     if (user.role === 'STUDENT' && (currentTab === 'cctv' || currentTab === 'classrooms' || currentTab === 'settings' || currentTab === 'lectures')) {
       setCurrentTab('dashboard');
     }
@@ -76,14 +77,13 @@ export function App() {
 
   // Reset Data
   const handleResetData = () => {
-    if (window.confirm('Are you sure you want to restore the prototype database to default demo records?')) {
-      storageService.resetToDefaults();
-      setClassrooms(storageService.getClassrooms());
-      setCameras(storageService.getCameras());
-      setLectures(storageService.getLectures());
-      setCurrentUser(storageService.getCurrentUser());
-      alert('Default records restored successfully.');
-    }
+    storageService.resetToDefaults();
+    setClassrooms(storageService.getClassrooms());
+    setCameras(storageService.getCameras());
+    setLectures(storageService.getLectures());
+    setCurrentUser(storageService.getCurrentUser());
+    setAppNotice('Default demonstration records restored successfully.');
+    setTimeout(() => setAppNotice(null), 4000);
   };
 
   // Navigation Helpers
@@ -94,17 +94,23 @@ export function App() {
 
   const handleNavigateToCCTV = () => {
     if (currentUser.role === 'STUDENT') {
-      alert('Access restricted: Live CCTV feeds are reserved for Faculty and Administrators.');
+      setAppNotice('Access restricted: Live CCTV feeds are reserved for Faculty and Administrators.');
+      setTimeout(() => setAppNotice(null), 4000);
       return;
     }
     setCurrentTab('cctv');
   };
 
   const summaryStats = storageService.getSummaryStats();
-  const activeLectures = lectures.filter(l => l.status === 'IN_PROGRESS');
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f8fafc] text-slate-900">
+      {appNotice && (
+        <div className="fixed top-20 right-6 z-50 px-4 py-3 rounded-xl bg-slate-900 text-white text-xs font-semibold shadow-xl border border-slate-700">
+          {appNotice}
+        </div>
+      )}
+
       {/* Top Navigation Bar */}
       <Navbar
         currentUser={currentUser}
@@ -140,6 +146,7 @@ export function App() {
               cameras={cameras}
               classrooms={classrooms}
               lectures={lectures}
+              initialCameraId={selectedCctvCameraId}
               onSaveLecture={handleSaveLecture}
               onSaveCamera={handleSaveCamera}
               backendStatus={backendStatus}
@@ -180,6 +187,11 @@ export function App() {
               cameras={cameras}
               onSaveClassroom={handleSaveClassroom}
               onSaveCamera={handleSaveCamera}
+              onOpenCameraFeed={(camId) => {
+                setSelectedCctvCameraId(camId);
+                setCurrentTab('cctv');
+              }}
+              onViewSchedule={() => setCurrentTab('lectures')}
             />
           )}
 

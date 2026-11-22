@@ -98,7 +98,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Server className="w-3.5 h-3.5" />
-            <span>{backendOnline ? 'Python YOLOv8: Live' : 'Demo Stream Mode'}</span>
+            <span>{backendOnline ? 'AI Vision & CCTV: Live' : 'In-Browser Vision'}</span>
             <span className="text-[10px] opacity-75">ℹ️</span>
           </button>
         </div>

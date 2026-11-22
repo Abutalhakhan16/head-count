@@ -49,7 +49,7 @@ export interface DetectionResult {
   timestamp: string;
 }
 
-const BACKEND_BASE_URL = 'http://localhost:8000';
+const BACKEND_BASE_URL = '';
 
 export const aiBackendService = {
   baseUrl: BACKEND_BASE_URL,
@@ -57,7 +57,7 @@ export const aiBackendService = {
   async checkStatus(): Promise<BackendStatus> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const res = await fetch(`${this.baseUrl}/api/status`, {
         signal: controller.signal,
       });
@@ -67,25 +67,25 @@ export const aiBackendService = {
       return {
         online: true,
         version: data.version || '2.6.0',
-        device: data.device || 'CPU / Apple Silicon Metal MPS',
-        model: data.model || 'YOLOv8n + Haar Cascades Head Detection',
+        device: data.device || 'Browser WebGL + Node.js FFmpeg',
+        model: data.model || 'TensorFlow.js COCO-SSD + BlazeFace',
         fps: data.fps || 30,
         activeStreams: data.active_streams || 1,
-        message: 'Connected to Python FastAPI & YOLOv8 + Head Vision Engine',
+        message: 'Connected to CCTV Stream Proxy & Real-Time AI Vision Engine',
         features: data.features || { head_counting: true, webcam_support: true, cctv_rtsp_support: true, roi_filter: true },
       };
     } catch {
       return {
         online: false,
-        message: 'Python Backend Offline (Using In-Browser Head Detection & Stream)',
+        message: 'Stream Proxy Offline (In-Browser AI Vision & Local Video Files Active)',
       };
     }
   },
 
-  async testCctvConnection(rtspUrl: string): Promise<{ online: boolean; message: string; resolution?: string }> {
+  async testCctvConnection(rtspUrl: string): Promise<{ online: boolean; reachable?: boolean; message: string; resolution?: string; codec?: string }> {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(() => controller.abort(), 6500);
       const res = await fetch(`${this.baseUrl}/api/test-cctv`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -98,7 +98,8 @@ export const aiBackendService = {
     } catch (e: any) {
       return {
         online: false,
-        message: `Connection check failed: ${e.message || 'Make sure backend is running'}`,
+        reachable: false,
+        message: `Connection check failed: ${e.message || 'Server unreachable'}`,
       };
     }
   },
@@ -119,75 +120,16 @@ export const aiBackendService = {
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
-      console.warn('Failed to register camera to backend:', e);
-      return null;
-    }
-  },
-
-  async processFrame(
-    blob: Blob,
-    options?: {
-      mode?: 'head' | 'person' | 'both';
-      confidence?: number;
-      roi?: { x: number; y: number; width: number; height: number };
-    }
-  ): Promise<DetectionResult | null> {
-    try {
-      const formData = new FormData();
-      formData.append('file', blob, 'frame.jpg');
-      formData.append('mode', options?.mode || 'head');
-      if (options?.confidence !== undefined) {
-        formData.append('confidence', options.confidence.toString());
-      }
-      if (options?.roi) {
-        formData.append('roi_x', options.roi.x.toString());
-        formData.append('roi_y', options.roi.y.toString());
-        formData.append('roi_width', options.roi.width.toString());
-        formData.append('roi_height', options.roi.height.toString());
-      }
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-      const res = await fetch(`${this.baseUrl}/api/count-frame`, {
-        method: 'POST',
-        body: formData,
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      return null;
-    }
-  },
-
-  async processVideoFile(file: File): Promise<any | null> {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      const res = await fetch(`${this.baseUrl}/api/process-video`, {
-        method: 'POST',
-        body: formData,
-      });
-      if (!res.ok) throw new Error('Failed to process video');
-      return await res.json();
-    } catch (e) {
-      console.warn('Video upload processing error:', e);
+      console.warn('Failed to register camera:', e);
       return null;
     }
   },
 
   getRtspStreamUrl(cameraId: string): string {
-    return `${this.baseUrl}/api/stream/${cameraId}`;
+    return `${this.baseUrl}/api/stream/${encodeURIComponent(cameraId)}`;
   },
 
   getCustomCctvStreamUrl(url: string): string {
     return `${this.baseUrl}/api/cctv/stream?url=${encodeURIComponent(url)}`;
   },
-
-  getWebcamStreamUrl(): string {
-    return `${this.baseUrl}/api/webcam/stream`;
-  }
 };

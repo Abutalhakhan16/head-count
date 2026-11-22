@@ -1,0 +1,21 @@
+{
+  "name": "smart-classroom-analytics",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm --prefix frontend run build && node server.js",
+    "build": "npm --prefix frontend run build",
+    "start": "node server.js",
+    "lint": "frontend/node_modules/.bin/tsc --noEmit -p frontend/tsconfig.json"
+  },
+  "dependencies": {
+    "@tensorflow-models/blazeface": "^0.1.0",
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow/tfjs": "^4.22.0",
+    "express": "^4.21.2"
+  }
+}
